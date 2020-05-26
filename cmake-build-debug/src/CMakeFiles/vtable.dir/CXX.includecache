@@ -422,12 +422,6 @@ type/value.h
 buffer/buffer_pool_manager.h
 /home/zhou/Documents/cmu_15445_2018/src/buffer/buffer/buffer_pool_manager.h
 
-/home/zhou/Documents/cmu_15445_2018/src/buffer/lru_replacer.cpp
-buffer/lru_replacer.h
-/home/zhou/Documents/cmu_15445_2018/src/buffer/buffer/lru_replacer.h
-page/page.h
-/home/zhou/Documents/cmu_15445_2018/src/buffer/page/page.h
-
 /home/zhou/Documents/cmu_15445_2018/src/concurrency/transaction_manager.cpp
 concurrency/transaction_manager.h
 /home/zhou/Documents/cmu_15445_2018/src/concurrency/concurrency/transaction_manager.h
@@ -435,14 +429,6 @@ table/table_heap.h
 /home/zhou/Documents/cmu_15445_2018/src/concurrency/table/table_heap.h
 cassert
 -
-
-/home/zhou/Documents/cmu_15445_2018/src/hash/extendible_hash.cpp
-list
--
-hash/extendible_hash.h
-/home/zhou/Documents/cmu_15445_2018/src/hash/hash/extendible_hash.h
-page/page.h
-/home/zhou/Documents/cmu_15445_2018/src/hash/page/page.h
 
 /home/zhou/Documents/cmu_15445_2018/src/index/b_plus_tree.cpp
 iostream

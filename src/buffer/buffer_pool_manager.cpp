@@ -8,8 +8,8 @@ namespace cmudb {
  * WARNING: Do Not Edit This Function
  */
 BufferPoolManager::BufferPoolManager(size_t pool_size,
-                                                 DiskManager *disk_manager,
-                                                 LogManager *log_manager) {
+                                     DiskManager *disk_manager,
+                                     LogManager *log_manager) {
   // a consecutive memory space for buffer pool
   pages_ = new Page[pool_size_];
   page_table_ = new ExtendibleHash<page_id_t, Page *>(BUCKET_SIZE);
@@ -44,8 +44,34 @@ BufferPoolManager::~BufferPoolManager() {
  * 4. Update page metadata, read page content from disk file and return page
  * pointer
  */
-Page *BufferPoolManager::FetchPage(page_id_t page_id) { return nullptr; }
+Page *BufferPoolManager::FetchPage(page_id_t page_id) {
+  std::lock_guard<std::mutex> lockGuard(latch_);
+  Page *tar = nullptr;
+  if (page_table_->Find(page_id, tar)) {
+    return tar;
+  } else {
+    findReplacer(tar);
+  }
 
+  if (tar->is_dirty_) {
+    disk_manager_->WritePage(tar->page_id_,
+                             reinterpret_cast<const char *>(tar));
+  }
+  page_table_->Insert(page_id, tar);
+  disk_manager_->ReadPage(page_id, reinterpret_cast<char *>(tar));
+  return nullptr;
+}
+
+Page *BufferPoolManager::findReplacer(Page *page) {
+  Page *tar = nullptr;
+  if (!free_list_->empty()) {
+    tar = free_list_->front();
+    free_list_->pop_front();
+  } else {
+    replacer_->Victim(tar);
+  }
+  return tar;
+}
 /*
  * Implementation of unpin page
  * if pin_count>0, decrement it and if it becomes zero, put it back to
@@ -53,7 +79,19 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) { return nullptr; }
  * dirty flag of this page
  */
 bool BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) {
-  return false;
+  std::lock_guard<std::mutex> lockGuard(latch_);
+  Page *tar;
+  page_table_->Find(page_id, tar);
+  if (tar->pin_count_ > 0) {
+    tar->pin_count_--;
+    if (tar->pin_count_ == 0) {
+      replacer_->Insert(tar);
+    }
+  }
+  if (tar->pin_count_ <= 0)
+    return false;
+  tar->is_dirty_ = is_dirty;
+  return true;
 }
 
 /*
@@ -62,7 +100,17 @@ bool BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) {
  * if page is not found in page table, return false
  * NOTE: make sure page_id != INVALID_PAGE_ID
  */
-bool BufferPoolManager::FlushPage(page_id_t page_id) { return false; }
+bool BufferPoolManager::FlushPage(page_id_t page_id) {
+  std::lock_guard<std::mutex> lockGuard(latch_);
+  assert(page_id != INVALID_PAGE_ID);
+  Page *tar;
+  if (page_table_->Find(page_id, tar)) {
+    disk_manager_->WritePage(tar->page_id_,
+                             reinterpret_cast<const char *>(tar));
+    return true;
+  }
+  return false;
+}
 
 /**
  * User should call this method for deleting a page. This routine will call
@@ -72,7 +120,20 @@ bool BufferPoolManager::FlushPage(page_id_t page_id) { return false; }
  * call disk manager's DeallocatePage() method to delete from disk file. If
  * the page is found within page table, but pin_count != 0, return false
  */
-bool BufferPoolManager::DeletePage(page_id_t page_id) { return false; }
+bool BufferPoolManager::DeletePage(page_id_t page_id) {
+  std::lock_guard<std::mutex> lockGuard(latch_);
+  Page *tar;
+  if (page_table_->Find(page_id, tar)) {
+    if (tar->pin_count_ > 0) {
+      return false;
+    }
+    page_table_->Remove(tar->page_id_);
+    tar->ResetMemory();
+    free_list_->push_back(tar);
+  }
+  disk_manager_->DeallocatePage(tar->page_id_);
+  return true;
+}
 
 /**
  * User should call this method if needs to create a new page. This routine
@@ -82,5 +143,15 @@ bool BufferPoolManager::DeletePage(page_id_t page_id) { return false; }
  * update new page's metadata, zero out memory and add corresponding entry
  * into page table. return nullptr if all the pages in pool are pinned
  */
-Page *BufferPoolManager::NewPage(page_id_t &page_id) { return nullptr; }
+Page *BufferPoolManager::NewPage(page_id_t &page_id) {
+  std::lock_guard<std::mutex> lockGuard(latch_);
+  Page *tar = nullptr;
+  page_id = disk_manager_->AllocatePage();
+  findReplacer(tar);
+  tar->ResetMemory();
+  tar->pin_count_ = 0;
+  tar->is_dirty_ = false;
+  // 怎么找所有的page
+  return nullptr;
+}
 } // namespace cmudb
