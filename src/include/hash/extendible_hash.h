@@ -43,5 +43,6 @@ public:
 
 private:
   // add your own member variables here
+
 };
 } // namespace cmudb
